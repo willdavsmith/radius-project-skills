@@ -22,7 +22,7 @@ Use this skill to generate a Radius application definition (`app.bicep`) from a 
 When asked to model a repository:
 
 1. Generate the application definition and write both `.radius/app.bicep` and `.radius/bicepconfig.json` (see [bicepconfig.json](#bicepconfigjson)) to the current working branch of the target repository.
-2. Commit both files to that branch, and push the branch when a remote is configured.
+2. Commit and push both files only after the exact target extension compiles the model and the validation checklist passes. If a newly generated floating extension lags the proven target contract, leave the exact-contract files as an uncommitted draft, report the validation blocker, and do not offer a pull request.
 3. In your chat reply, give a one-line intro naming the app (e.g. "I'll create an application definition for `todo-list-app`."), then a short, natural summary of the resources you identified — a brief list such as "Container: `todo-list-app`", "MySQL database", "Secret for DB credentials". A sentence or two of reasoning is fine; don't dump raw source analysis or the full file contents.
 4. Then ask whether to open a pull request against the default branch.
 
@@ -37,9 +37,9 @@ Before writing the Bicep:
 3. Inventory every executable workload and backing service in the selected profile from manifests, Dockerfiles, compose/Helm files, entrypoints, source configuration reads, client initialization, and referenced config files. Treat web, worker, producer, consumer, migration, scheduler, and sidecar roles separately.
 4. Extract each workload's runtime contract: image/build context, entrypoint and arguments, listener and ports, required environment/configuration, secrets, writable storage, dependencies, wire protocols, and feature-critical configuration.
 5. Map every selected backing service to a Radius type with [component-catalog.md](references/component-catalog.md), using [architecture-patterns.md](references/architecture-patterns.md) only as context. Report unsupported essential components instead of substituting unrelated types.
-6. First create or update `.radius/bicepconfig.json` (see [bicepconfig.json](#bicepconfigjson)), using any `bicepconfig.json` currently applicable to `.radius/app.bicep` as input. Then resolve every emitted type and planned property read/write against the Radius extension that `.radius/bicepconfig.json` declares. Record the verbatim property path and schema proof in the ledger; for recipe outputs, also prove the output mapping and any managed-secret key. Reject an absent path before generation instead of guessing an alias, convenience property, or wrapper. Use the matching `resource-types-contrib` schema revision and target Environment recipe/output contract; do not copy shapes from another version.
+6. Resolve the target Environment's exact schema and recipe/output contract before creating or updating `.radius/bicepconfig.json` (see [bicepconfig.json](#bicepconfigjson)). Use any `bicepconfig.json` currently applicable to `.radius/app.bicep` as input, then make `.radius/bicepconfig.json` resolve the matching Radius extension. Record every emitted property path, recipe output mapping, and managed-secret key verbatim in the ledger. Reject an absent path instead of guessing an alias, convenience property, or wrapper. A mutable default config that this skill just created is a validator, not permission to change the selected deployment profile: if `radius:latest` lags the proven target schema/recipe, preserve the exact-contract model, report the extension drift and blocked local compilation, and require compilation with the target extension. Never weaken managed TLS/auth/secret wiring or fall back to an unrelated source default merely to make the floating extension compile.
 7. Choose a source build only when the repository has a complete, practical build context. Otherwise use a pinned published image. Map every runtime value using [connection-conventions.md](references/connection-conventions.md), [secrets-handling.md](references/secrets-handling.md), and [bicep-structure-rules.md](references/bicep-structure-rules.md).
-8. Generate the Bicep using [naming-conventions.md](references/naming-conventions.md), then compile it with the exact configured extension. Treat unknown type/property warnings as unresolved schema mismatches.
+8. Generate the Bicep using [naming-conventions.md](references/naming-conventions.md), then compile it with the exact target extension. Treat unknown type/property warnings as unresolved schema mismatches. If only a newly generated floating alias is available and it lags the proven target contract, retain the exact-contract files solely as an uncommitted draft and stop before publication; do not alter the model to obtain a misleading clean compile.
 9. Perform the [validation checklist](#validation-checklist) and close every item in the requirement ledger. Compilation or process startup alone is not success.
 
 ## Deployment Profile and Acceptance Contract
@@ -49,7 +49,7 @@ Before writing the Bicep:
 - **No implicit omissions:** Each required typed resource must be emitted and wired to a consumer. Each required workload role must have a runnable process and complete config. Each required native key/value must appear in the exact source-supported location and format.
 - **No decorative wiring:** Environment variables, connections, and resources must be consumed by the selected feature path. Merely declaring a dependency or starting a process does not prove the requested database, model, storage, or messaging path works.
 - **Infer only when unspecified:** Without an explicit profile, prefer a complete, documented manifest/configuration that exercises the application's primary feature. If multiple materially different profiles remain valid, ask the user rather than choosing an optional backend arbitrarily.
-- **Fail closed on verified incompatibility:** Fully implement every clearly supported criterion. Stop only after evidence proves the pinned source or exact schema/recipe cannot satisfy a requirement; do not return a partial definition as deployable or leave unresolved runtime caveats.
+- **Fail closed on verified incompatibility:** Fully implement every clearly supported criterion. Stop only after evidence proves the pinned source or exact schema/recipe cannot satisfy a requirement; do not return a partial definition as deployable or leave unresolved runtime caveats. A newly generated floating extension that lags the proven target contract is a validation blocker, not evidence that the target profile is incompatible.
 
 ### Repairing an existing app.bicep
 
@@ -117,14 +117,14 @@ Explicit profile-required resource, relationship, and app-native configuration n
 
 ### Extensible types (from `radius-project/resource-types-contrib`)
 
-First inspect the target repository's `bicepconfig.json`: the `radius` extension alias is the compile-time contract. Resolve schemas from the `resource-types-contrib` revision that produced that artifact, or from the Environment's registered type definition. A mutable artifact such as `radius:latest`, a recipe tagged `latest`, or a branch ref can drift; warn about that uncertainty and do not mix its property shapes with a different revision.
+First inspect the target repository's `bicepconfig.json` and the target Environment: an existing pinned `radius` alias is the compile-time contract, while the Environment's registered type and recipe are the deployment contract. Resolve schemas from the `resource-types-contrib` revision that produced the artifact or registered definition. A mutable artifact such as `radius:latest`, a recipe tagged `latest`, or a branch ref can drift; warn about that uncertainty and do not mix property shapes from different revisions. If the skill itself must create the default floating alias and it lags the otherwise proven target contract, keep the target-contract model and report that exact-target compilation is still required; do not rewrite runtime wiring to match the stale alias.
 
 Use the `radius-project/resource-types-contrib` repository for discovery. Do NOT hardcode a file path — derive it from the resource type name using the repo convention:
 
 - Category = the segment after `Radius.` in the namespace (`Radius.Compute` → `Compute`, `Radius.Data` → `Data`, `Radius.Messaging` → `Messaging`, `Radius.AI` → `AI`, `Radius.Storage` → `Storage`, `Radius.Security` → `Security`)
 - Schema path = `<Category>/<typeName>/<typeName>.yaml` (e.g., `Radius.Data/mySqlDatabases` → `Data/mySqlDatabases/mySqlDatabases.yaml`)
 
-Read the matching schema file for property names, types, sensitivity, read-only outputs, and API versions. The configured extension and type registered in the target Environment must agree. Stop and report a version mismatch rather than choosing one contract or guessing.
+Read the matching schema file for property names, types, sensitivity, read-only outputs, and API versions. The configured extension and type registered in the target Environment must agree before publication. On a version mismatch, retain a proven exact-target model only as an uncommitted draft, report the blocker, and stop rather than choosing one contract or guessing.
 
 The following is the COMPLETE allow-list of types this skill may emit:
 
@@ -224,7 +224,7 @@ Before returning the Bicep, verify:
 - [ ] One deployment profile is selected. Every explicit type, workload role/count, native key, required value, secret binding, and connection name from the request is represented in a closed requirement ledger.
 - [ ] Every planned resource property read/write has its verbatim path in the ledger and exists in the exact configured schema/API version. Every recipe-generated output also has a verified output mapping; every managed-secret reference has the declared secret-name path and key. An absent path blocks generation rather than being replaced by a guessed property, alias, or wrapper.
 - [ ] Exactly one `Radius.Core/applications@2025-08-01-preview`, and one `extension radius` (no per-namespace or per-type extensions).
-- [ ] The file compiles with the target repository's exact configured extension; every `Radius.*` type is on the allow-list and matches that version's schema and API version. Unknown type/property warnings are resolved, not ignored.
+- [ ] The file compiles with the target repository's exact configured extension; every `Radius.*` type is on the allow-list and matches that version's schema and API version. Unknown type/property warnings are resolved, not ignored. If only a newly generated floating alias is available and it conflicts with the proven target Environment contract, the exact-contract file is retained, the drift is reported as a validation blocker, and deployability is not claimed until the target extension compiles it.
 - [ ] `param environment string` is declared; add a `@secure() param` for each developer-supplied secret.
 - [ ] Every required executable role is modeled, including co-scheduled producer/consumer or proxy/backend roles. Its image/build, entrypoint/arguments, listener, exposed ports, config artifacts, writable storage/ownership, and lifecycle are correct. `containerPort` matches the process; it does not configure the listener.
 - [ ] Every required app-native input is supplied with the exact pinned-source name, casing, type, URL/config syntax, and value. Each declared generic connection is consumed by source or explicitly required as relationship metadata.
@@ -239,4 +239,4 @@ Before returning the Bicep, verify:
 
 ## Example
 
-See [todo-list-app-example.md](references/todo-list-app-example.md) for source-derived modeling decisions when an application expects native database variables instead of Radius generic connection variables.
+See [todo-list-app-example.md](references/todo-list-app-example.md) for source-derived database wiring and [managed-kafka-example.md](references/managed-kafka-example.md) for closing a managed Kafka client tuple without downgrading TLS, authentication, or secret handling.

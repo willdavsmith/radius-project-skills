@@ -10,6 +10,8 @@ Match by **wire protocol, not only a library or type name**: MariaDB clients can
 - Confirm the pinned source has the adapter/client and exact configuration path. Do not emit a requested type merely because the repository mentions it in unrelated tests or examples.
 - Without an explicit profile, prefer a complete documented runtime manifest/configuration. Do not promote an optional dependency solely because a package is installed.
 - Every selected type must be used by a modeled workload's primary feature. A declared but unwired resource is not a detected component.
+- Do not infer public ingress from an HTTP listener, exposed port, health endpoint, or web UI alone. Emit `Radius.Compute/routes` only when the selected profile explicitly needs an externally reachable URL and the target Environment has a compatible route recipe.
+- Do not enable optional application features, such as dynamic configuration, merely because source supports them. Include their settings and storage only when the selected profile requires that feature.
 
 ## Compute
 
@@ -36,6 +38,14 @@ Match by **wire protocol, not only a library or type name**: MariaDB clients can
 | Full-text / AI search | `@elastic/elasticsearch`, `@opensearch-project/opensearch` / `elasticsearch`, `opensearch-py` / `Azure.Search.Documents` | `Radius.AI/search` | Web App, Microservices, Data Pipeline, AI/ML |
 | Object storage (S3 / Blob / GCS) | SDK dependency, filesystem/backend adapter, compose/Helm config, or explicit compatible profile selecting remote object storage | `Radius.Storage/objectStorage` | Web App, Data Pipeline, AI/ML |
 | App secrets (API keys, tokens); DB creds when the schema uses `secretName` | env-injected secrets; API keys in config | `Radius.Security/secrets` | supporting |
+
+### Managed Kafka
+
+Selecting `Radius.Messaging/kafka` does not close the workload connection. Before emitting Kafka client settings, inspect the concrete recipe and prove the complete endpoint, port, transport security, authentication mechanism, identity, managed-secret path/key, and app-native config syntax. Never assign a bare `properties.host` output directly to a bootstrap-server setting unless the recipe proves it is already a complete `host:port` value.
+
+For the Azure Event Hubs recipe whose outputs are a namespace `host` plus managed `secrets.connectionString`, the Kafka client tuple is the Event Hubs FQDN on port 9093, `SASL_SSL`, `PLAIN`, username `$ConnectionString`, and the full connection string as the password. Bind that password from the declared managed secret with `secretKeyRef` and compose the final JAAS value at container runtime. Re-resolve these fields against the exact recipe revision rather than assuming this Azure shape for every Kafka recipe. See [managed-kafka-example.md](managed-kafka-example.md).
+
+Do not replace this managed profile with a plaintext Kafka compose example when a floating extension lacks the recipe's managed-secret shape. That is extension drift, not a compatible fallback.
 
 ## Recognized but no Radius type yet
 

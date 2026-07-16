@@ -239,6 +239,7 @@ Rules:
 3. If neither path is viable, report the packaging gap instead of using a bare runtime base image or inventing a fragile build wrapper.
 
 Do not use branch refs or `latest` when an immutable commit, tag, or digest is available.
+A digest proves only the exact registry/repository manifest from which it was resolved. Never attach a digest discovered from one registry or mirror to an image name in another registry. If the digest cannot be verified against the selected image repository, use that repository's immutable release tag and report the remaining tag mutability instead.
 
 ## Runtime semantics
 
